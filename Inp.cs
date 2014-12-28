@@ -1,4 +1,6 @@
-﻿/* This thing was written by Adriaan de Jongh, http://adriaandejongh.nl */
+﻿// By Adriaan de Jongh, http://adriaandejongh.nl
+// More Unity scripts: https://github.com/AdriaandeJongh/UnityTools
+
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
