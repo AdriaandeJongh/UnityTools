@@ -74,7 +74,7 @@ public class AccelerationInput : MonoBehaviour
 
 			if(thisIndex < 0) 
 			{
-				thisIndex = instance.historySize - 1;
+				thisIndex += instance.historySize;
 			}
 
 			addedAccels += instance.history[thisIndex];
