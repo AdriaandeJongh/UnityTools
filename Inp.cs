@@ -161,7 +161,7 @@ public class Inp : MonoBehaviour
 		touchHistory[touch.fingerId][touchHistoryIndex[touch.fingerId]] = touch.position;
 		touchHistoryCount[touch.fingerId] = 1;
 	}
-	
+
 	///<returns>Returns the current position of a touch using Unity's unique fingerId.</returns>
 	public Vector2 TouchPosition(int fingerId)
 	{
@@ -213,15 +213,14 @@ public class Inp : MonoBehaviour
 		
 		if(howManyBack >= touchHistorySize)
 		{
-			Debug.LogError ("You can't go back further than or as far away as the touch history!" +
-			                "Taking the touch furthest away.");
+			Debug.LogError ("You can't go back further than or as far away as the touch history!");
 			howManyBack = touchHistorySize - 1;
 		}
 		
 		if(howManyBack > touchHistoryCount[fingerId] - 1)
 		{
-			//			Debug.LogWarning("Requested previous touch position doesn't exist yet, " +
-			//				"so the earliest touch available was returned.");
+//			Debug.LogWarning("Requested previous touch position doesn't exist yet, " +
+//				"so the earliest touch available was returned.");
 			howManyBack = touchHistoryCount[fingerId] - 1;
 		}
 		
