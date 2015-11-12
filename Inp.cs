@@ -1,5 +1,5 @@
 ﻿// By Adriaan de Jongh, http://adriaandejongh.nl
-// More Unity scripts: https://github.com/AdriaandeJongh/UnityTools
+// More info & other Unity scripts: https://github.com/AdriaandeJongh/UnityTools
 
 using UnityEngine;
 using System.Collections;
@@ -455,7 +455,8 @@ public class Inp : MonoBehaviour
 			}
 		}
 	}
-	
+
+	///<returns>Returns whether the mouse or touches are touching or hovering over Unity 5's UI.</returns>
 	public bool isOverUI
 	{
 		get
@@ -481,7 +482,8 @@ public class Inp : MonoBehaviour
 			return false;
 		}
 	}
-	
+
+	///<returns>Returns whether a specific touch is touching or hovering over Unity 5's UI.</returns>
 	public bool IsOverUI(int fingerId)
 	{
 		if(EventSystem.current == null)
@@ -503,9 +505,3 @@ public class Inp : MonoBehaviour
 	}
 	
 }
-
-
-
-
-
-
