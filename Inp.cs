@@ -4,11 +4,12 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.EventSystems;
 
 public class Inp : MonoBehaviour 
 {
 	private static Inp instance;
-
+	
 	///Inp.ut   - get it? hrhr.
 	public static Inp ut
 	{
@@ -24,41 +25,50 @@ public class Inp : MonoBehaviour
 			return instance;
 		}
 	}
-
+	
 	private Vector2[] mouseHistory; 
 	private int mouseHistoryIndex = 0;
-	private const int mouseHistorySize = 50; //in frames, so divide by fps for # of seconds
-
-	private Dictionary<int, Vector2[]> touchHistory = new Dictionary<int, Vector2[]>();
-	private Dictionary<int, int> touchHistoryIndex = new Dictionary<int, int>();
-	private const int touchHistorySize = 50; //in frames, so divide by fps for # of seconds
-
+	private const int mouseHistorySize = 30; //in frames, so divide by fps for # of seconds
+	
+	private Dictionary<int, Vector2[]> touchHistory;
+	private Dictionary<int, int> touchHistoryIndex;
+	private Dictionary<int, int> touchHistoryCount;
+	private const int touchHistorySize = 30; //in frames, so divide by fps for # of seconds
+	
 	void Awake()
 	{
 		mouseHistory = new Vector2[mouseHistorySize];
+		touchHistory = new Dictionary<int, Vector2[]>();
+		touchHistoryIndex = new Dictionary<int, int>();
+		touchHistoryCount = new Dictionary<int, int>();
 	}
 	
-	void Start()
+	public void Start()
 	{
-
+		
 	}
-
+	
 	void Update()
 	{
-		#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
-		UpdateMouse();
-		#elif UNITY_IPHONE || UNITY_WP8 || UNITY_ANDROID
-		UpdateTouch();
-		#endif
+		if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
+			UpdateMouse();
+		else if(Application.isMobilePlatform)
+			UpdateTouch();
 	}
-
+	
+	void LateUpdate()
+	{
+		if(Application.isMobilePlatform)
+			RemoveEndedTouches();
+	}
+	
 	/// <summary> Updates mouse history based on Unity's Input class. </summary>
 	void UpdateMouse()
 	{
 		mouseHistoryIndex = (mouseHistoryIndex + 1) % mouseHistorySize;
 		mouseHistory[mouseHistoryIndex] = Input.mousePosition;
 	}
-
+	
 	/// <summary> Updates touches history based on Unity's Input class. </summary>
 	void UpdateTouch()
 	{
@@ -72,15 +82,24 @@ public class Inp : MonoBehaviour
 			{
 				touchHistoryIndex[touch.fingerId] = (touchHistoryIndex[touch.fingerId] + 1) % touchHistorySize;
 				touchHistory[touch.fingerId][touchHistoryIndex[touch.fingerId]] = touch.position;
-			}
-			else if(touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
-			{
-				touchHistoryIndex.Remove(touch.fingerId);
-				touchHistory.Remove(touch.fingerId);
+				touchHistoryCount[touch.fingerId] = Mathf.Clamp(touchHistoryCount[touch.fingerId] + 1, 0, touchHistorySize);
 			}
 		}
 	}
-
+	
+	void RemoveEndedTouches()
+	{
+		foreach(Touch touch in Input.touches)
+		{
+			if(touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+			{
+				touchHistoryIndex.Remove(touch.fingerId);
+				touchHistory.Remove(touch.fingerId);
+				touchHistoryCount.Remove(touch.fingerId);
+			}
+		}
+	}
+	
 	///<returns>Returns the current mouse position.</returns>
 	public Vector2 mousePosition
 	{
@@ -105,7 +124,7 @@ public class Inp : MonoBehaviour
 	}
 	
 	///<returns>Returns the average delta position over an amount of samples.</returns>
-	public Vector2 MouseDeltaSample(int sampleLength)
+	public Vector2 MouseDeltaPositionSample(int sampleLength)
 	{
 		Vector2 avgDeltaPos = Vector2.zero;
 		int thisIndex = mouseHistoryIndex;
@@ -127,7 +146,7 @@ public class Inp : MonoBehaviour
 		
 		return avgDeltaPos;
 	}
-
+	
 	/// <summary> Adds a touch & touch index to history. </summary>
 	private void AddTouch(Touch touch)
 	{
@@ -135,15 +154,14 @@ public class Inp : MonoBehaviour
 		{
 			touchHistoryIndex.Add(touch.fingerId, 0);
 			touchHistory.Add(touch.fingerId, new Vector2[touchHistorySize]);
+			touchHistoryCount.Add(touch.fingerId, 0);
 		}
-
-		touchHistoryIndex[touch.fingerId] = 1;
-		touchHistory[touch.fingerId][touchHistoryIndex[touch.fingerId]] = touch.position;
 		
-		//also set previous
-		touchHistory[touch.fingerId][touchHistoryIndex[touch.fingerId] - 1] = touch.position - touch.deltaPosition;
+		touchHistoryIndex[touch.fingerId] = 0;
+		touchHistory[touch.fingerId][touchHistoryIndex[touch.fingerId]] = touch.position;
+		touchHistoryCount[touch.fingerId] = 1;
 	}
-
+	
 	///<returns>Returns the current position of a touch using Unity's unique fingerId.</returns>
 	public Vector2 TouchPosition(int fingerId)
 	{
@@ -153,7 +171,9 @@ public class Inp : MonoBehaviour
 			{
 				if(touch.fingerId == fingerId)
 				{
-					if(touch.phase == TouchPhase.Began)
+					if(touch.phase == TouchPhase.Began || 
+					   touch.phase == TouchPhase.Moved || 
+					   touch.phase == TouchPhase.Stationary)
 					{
 						AddTouch(touch);
 					}
@@ -164,12 +184,12 @@ public class Inp : MonoBehaviour
 				}
 			}
 		}
-
+		
 		return touchHistory[fingerId][touchHistoryIndex[fingerId]];
 	}
-
-	///<returns>Returns the previous position of a touch using Unity's unique fingerId.</returns>
-	public Vector2 TouchPreviousPosition(int fingerId)
+	
+	///<returns>Returns a previous position of a touch using Unity's unique fingerId.</returns>
+	public Vector2 TouchPreviousPosition(int fingerId, int howManyBack = 1)
 	{
 		if(!touchHistory.ContainsKey(fingerId))
 		{
@@ -177,7 +197,9 @@ public class Inp : MonoBehaviour
 			{
 				if(touch.fingerId == fingerId)
 				{
-					if(touch.phase == TouchPhase.Began)
+					if(touch.phase == TouchPhase.Began || 
+					   touch.phase == TouchPhase.Moved || 
+					   touch.phase == TouchPhase.Stationary)
 					{
 						AddTouch(touch);
 					}
@@ -188,23 +210,88 @@ public class Inp : MonoBehaviour
 				}
 			}
 		}
-
-		int prevIndex = touchHistoryIndex[fingerId] - 1;
+		
+		if(howManyBack >= touchHistorySize)
+		{
+			Debug.LogError ("You can't go back further than or as far away as the touch history!" +
+			                "Taking the touch furthest away.");
+			howManyBack = touchHistorySize - 1;
+		}
+		
+		if(howManyBack > touchHistoryCount[fingerId] - 1)
+		{
+			//			Debug.LogWarning("Requested previous touch position doesn't exist yet, " +
+			//				"so the earliest touch available was returned.");
+			howManyBack = touchHistoryCount[fingerId] - 1;
+		}
+		
+		int prevIndex = touchHistoryIndex[fingerId] - howManyBack;
 		if(prevIndex < 0) prevIndex += touchHistorySize;
-
+		
 		return touchHistory[fingerId][prevIndex];
 	}
-
+	
 	///<returns>Returns the delta position of a touch using Unity's unique fingerId.</returns>
 	public Vector2 TouchDeltaPosition(int fingerId)
 	{
 		return TouchPosition(fingerId) - TouchPreviousPosition(fingerId);
 	}
-
+	
+	///<returns>Returns the average delta position over X samples of a touch, using Unity's unique fingerId. </returns>
+	/// 
+	/// NOTE: CURRENTLY FRAME RATE DEPENDENT!!!!!!
+	/// 
+	public Vector2 TouchDeltaPositionSample(int fingerId, int sampleLength)
+	{
+		
+		if(!touchHistory.ContainsKey(fingerId))
+		{
+			foreach(Touch touch in Input.touches)
+			{
+				if(touch.fingerId == fingerId)
+				{
+					if(touch.phase == TouchPhase.Began || touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary)
+					{
+						AddTouch(touch);
+					}
+					
+					return Vector2.zero;
+				}
+			}
+		}
+		
+		int samples = Mathf.Min(sampleLength, touchHistoryCount[fingerId] - 1); //history-1 because we'll need to go back in time at least 1 frame
+		
+		if(samples <= 1)
+		{
+			return Vector2.zero;
+		}
+		
+		Vector2 avgDeltaPos = Vector2.zero;
+		int thisIndex = touchHistoryIndex[fingerId];
+		int prevIndex = thisIndex - 1;
+		if(prevIndex < 0) prevIndex += touchHistorySize;
+		
+		for(int i = 0; i < samples; i++)
+		{
+			thisIndex = touchHistoryIndex[fingerId] - i;
+			if(thisIndex < 0) thisIndex += touchHistorySize;
+			
+			prevIndex = (thisIndex - 1);
+			if(prevIndex < 0) prevIndex += touchHistorySize;
+			
+			avgDeltaPos += touchHistory[fingerId][thisIndex] - touchHistory[fingerId][prevIndex];
+		}
+		
+		avgDeltaPos /= samples;
+		
+		return avgDeltaPos;
+	}
+	
 	///<returns>Returns screenPosition translated to worldspace.</returns>
 	public Vector3 To2DWorld(Vector2 screenPosition, float z = 0f)
 	{
-		if(!Camera.main.isOrthoGraphic || Camera.main.transform.eulerAngles.x != 0 || Camera.main.transform.eulerAngles.y != 0)
+		if(!Camera.main.orthographic || Camera.main.transform.eulerAngles.x != 0 || Camera.main.transform.eulerAngles.y != 0)
 		{
 			Debug.LogError("To use To2DWorld(), the camera needs to be orthographic & non-rotated on x- and y-axis!");
 		}
@@ -213,26 +300,34 @@ public class Inp : MonoBehaviour
 		worldPosition.z = z;
 		return worldPosition;
 	}
-
+	
 	///<returns>Returns true if any input is given.</returns>
 	public bool anyInput
 	{
 		get { return Input.GetMouseButton(0) || Input.GetMouseButtonUp(0) || Input.touchCount > 0; }
 	}
-
+	
 	///<returns>Returns true if the click or (first) touch is new this frame.</returns>
 	public bool firstInputDown
 	{
 		get 
-		{ 
-			#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
-			return Input.GetMouseButtonDown(0);
-			#elif UNITY_IPHONE || UNITY_WP8 || UNITY_ANDROID
-			if(Input.touchCount > 0)
+		{
+			if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
 			{
-				if(Input.GetTouch(0).phase == TouchPhase.Began)
+				return Input.GetMouseButtonDown(0);
+			}
+			else if(Application.isMobilePlatform)
+			{
+				if(Input.touchCount > 0)
 				{
-					return true;
+					if(Input.GetTouch(0).phase == TouchPhase.Began)
+					{
+						return true;
+					}
+					else
+					{
+						return false;
+					}
 				}
 				else
 				{
@@ -241,25 +336,33 @@ public class Inp : MonoBehaviour
 			}
 			else
 			{
+				Debug.LogError("Inp.ut doesn't support this platform!");
 				return false;
 			}
-			#endif
 		}
 	}
-
+	
 	///<returns>Returns true if the click or (first) touch is new this frame.</returns>
 	public bool firstInputUp
 	{
 		get 
-		{ 
-			#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
-			return Input.GetMouseButtonUp(0);
-			#elif UNITY_IPHONE || UNITY_WP8 || UNITY_ANDROID
-			if(Input.touchCount > 0)
+		{
+			if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
 			{
-				if(Input.GetTouch(0).phase == TouchPhase.Ended || Input.GetTouch(0).phase == TouchPhase.Canceled)
+				return Input.GetMouseButtonUp(0);
+			}
+			else if(Application.isMobilePlatform)
+			{
+				if(Input.touchCount > 0)
 				{
-					return true;
+					if(Input.GetTouch(0).phase == TouchPhase.Ended || Input.GetTouch(0).phase == TouchPhase.Canceled)
+					{
+						return true;
+					}
+					else
+					{
+						return false;
+					}
 				}
 				else
 				{
@@ -268,50 +371,137 @@ public class Inp : MonoBehaviour
 			}
 			else
 			{
+				Debug.LogError("Inp.ut doesn't support this platform!");
 				return false;
 			}
-			#endif
 		}
 	}
-
+	
 	///<returns>Returns screenPosition of either the mouse or the first touch.</returns>
 	public Vector2 firstInputPosition
 	{
 		get 
 		{
-			#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
-			return mousePosition;
-			#elif UNITY_IPHONE || UNITY_WP8 || UNITY_ANDROID || UNITY_METRO
-			if(Input.touchCount > 0)
-				return TouchPosition(Input.GetTouch(0).fingerId);
+			if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
+			{
+				return mousePosition;
+			}
+			else if(Application.isMobilePlatform)
+			{
+				if(Input.touchCount > 0)
+					return TouchPosition(Input.GetTouch(0).fingerId);
+				else
+					return Vector2.zero;
+			}
 			else
+			{
+				Debug.LogError("Inp.ut doesn't support this platform!");
 				return Vector2.zero;
-			#endif
+			}
 		}
 	}
-
+	
+	///<returns>Returns screenPosition of either the mouse or the first touch.</returns>
+	public Vector2 firstInputDeltaPosition
+	{
+		get 
+		{
+			if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
+			{
+				return mouseDeltaPosition;
+			}
+			else if(Application.isMobilePlatform)
+			{
+				if(Input.touchCount > 0)
+					return TouchDeltaPosition(Input.GetTouch(0).fingerId);
+				else
+					return Vector2.zero;
+			}
+			else
+			{
+				Debug.LogError("Inp.ut doesn't support this platform...");
+				return Vector2.zero;
+			}
+		}
+	}
+	
 	///<returns>Returns an array of screen position(s) of the mouse or all touches.</returns>
 	public Vector2[] allInputPositions
 	{
 		get 
 		{
-			#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
-			if(Input.GetMouseButton(0))
-				return new Vector2[] { mousePosition };
-			else
-				return new Vector2[0];
-			#elif UNITY_IPHONE || UNITY_WP8 || UNITY_ANDROID
-			Vector2[] touchPositions = new Vector2[Input.touchCount];
-			
-			for(int i = 0; i < Input.touchCount; i++)
+			if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
 			{
-				touchPositions[i] = TouchPosition(Input.GetTouch(i).fingerId);
+				if(Input.GetMouseButton(0))
+				return new Vector2[] { mousePosition };
+				else
+					return new Vector2[0];
 			}
-			
-			return touchPositions;
-			#endif
+			else if(Application.isMobilePlatform)
+			{
+				Vector2[] touchPositions = new Vector2[Input.touchCount];
+				
+				for(int i = 0; i < Input.touchCount; i++)
+				{
+					touchPositions[i] = TouchPosition(Input.GetTouch(i).fingerId);
+				}
+				
+				return touchPositions;
+			}
+			else
+			{
+				Debug.LogError("Inp.ut doesn't support this platform!");
+				return new Vector2[0];
+			}
 		}
 	}
+	
+	public bool isOverUI
+	{
+		get
+		{
+			if(EventSystem.current == null)
+				return false;
+			
+			if(EventSystem.current.currentInputModule is TouchInputModule) 
+			{
+				foreach(Touch touch in Input.touches) 
+				{
+					if(EventSystem.current.IsPointerOverGameObject( touch.fingerId )) 
+					{
+						return true;
+					}
+				}
+			}
+			else
+			{
+				return EventSystem.current.IsPointerOverGameObject();
+			}
+			
+			return false;
+		}
+	}
+	
+	public bool IsOverUI(int fingerId)
+	{
+		if(EventSystem.current == null)
+			return false;
+		
+		if(EventSystem.current.currentInputModule is TouchInputModule) 
+		{
+			if(EventSystem.current.IsPointerOverGameObject(fingerId)) 
+			{
+				return true;
+			}
+		}
+		else
+		{
+			return EventSystem.current.IsPointerOverGameObject(fingerId);
+		}
+		
+		return false;
+	}
+	
 }
 
 
