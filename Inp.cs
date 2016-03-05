@@ -33,6 +33,7 @@ public class Inp : MonoBehaviour
 	private Dictionary<int, Vector2[]> touchHistory;
 	private Dictionary<int, int> touchHistoryIndex;
 	private Dictionary<int, int> touchHistoryCount;
+	private Dictionary<int, bool> touchOverUIHistory;
 	private const int touchHistorySize = 30; //in frames, so divide by fps for # of seconds
 	
 	void Awake()
@@ -41,6 +42,7 @@ public class Inp : MonoBehaviour
 		touchHistory = new Dictionary<int, Vector2[]>();
 		touchHistoryIndex = new Dictionary<int, int>();
 		touchHistoryCount = new Dictionary<int, int>();
+		touchOverUIHistory = new Dictionary<int, bool>();
 	}
 	
 	public void Start()
@@ -83,6 +85,11 @@ public class Inp : MonoBehaviour
 				touchHistoryIndex[touch.fingerId] = (touchHistoryIndex[touch.fingerId] + 1) % touchHistorySize;
 				touchHistory[touch.fingerId][touchHistoryIndex[touch.fingerId]] = touch.position;
 				touchHistoryCount[touch.fingerId] = Mathf.Clamp(touchHistoryCount[touch.fingerId] + 1, 0, touchHistorySize);
+
+				if(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+					touchOverUIHistory[touch.fingerId] = true;
+				else
+					touchOverUIHistory[touch.fingerId] = false;
 			}
 		}
 	}
@@ -96,6 +103,7 @@ public class Inp : MonoBehaviour
 				touchHistoryIndex.Remove(touch.fingerId);
 				touchHistory.Remove(touch.fingerId);
 				touchHistoryCount.Remove(touch.fingerId);
+				touchOverUIHistory.Remove(touch.fingerId);
 			}
 		}
 	}
@@ -155,13 +163,19 @@ public class Inp : MonoBehaviour
 			touchHistoryIndex.Add(touch.fingerId, 0);
 			touchHistory.Add(touch.fingerId, new Vector2[touchHistorySize]);
 			touchHistoryCount.Add(touch.fingerId, 0);
+			touchOverUIHistory.Add(touch.fingerId, false);
 		}
 		
 		touchHistoryIndex[touch.fingerId] = 0;
 		touchHistory[touch.fingerId][touchHistoryIndex[touch.fingerId]] = touch.position;
 		touchHistoryCount[touch.fingerId] = 1;
-	}
 
+		if(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+			touchOverUIHistory[touch.fingerId] = true;
+		else
+			touchOverUIHistory[touch.fingerId] = false;
+	}
+	
 	///<returns>Returns the current position of a touch using Unity's unique fingerId.</returns>
 	public Vector2 TouchPosition(int fingerId)
 	{
@@ -219,8 +233,8 @@ public class Inp : MonoBehaviour
 		
 		if(howManyBack > touchHistoryCount[fingerId] - 1)
 		{
-//			Debug.LogWarning("Requested previous touch position doesn't exist yet, " +
-//				"so the earliest touch available was returned.");
+			//			Debug.LogWarning("Requested previous touch position doesn't exist yet, " +
+			//				"so the earliest touch available was returned.");
 			howManyBack = touchHistoryCount[fingerId] - 1;
 		}
 		
@@ -454,7 +468,7 @@ public class Inp : MonoBehaviour
 			}
 		}
 	}
-
+	
 	///<returns>Returns whether the mouse or touches are touching or hovering over Unity 5's UI.</returns>
 	public bool isOverUI
 	{
@@ -462,12 +476,12 @@ public class Inp : MonoBehaviour
 		{
 			if(EventSystem.current == null)
 				return false;
-			
-			if(EventSystem.current.currentInputModule is TouchInputModule) 
+
+			if(Input.touchCount > 0) 
 			{
 				foreach(Touch touch in Input.touches) 
 				{
-					if(EventSystem.current.IsPointerOverGameObject( touch.fingerId )) 
+					if(touchOverUIHistory[touch.fingerId]) 
 					{
 						return true;
 					}
@@ -481,16 +495,16 @@ public class Inp : MonoBehaviour
 			return false;
 		}
 	}
-
+	
 	///<returns>Returns whether a specific touch is touching or hovering over Unity 5's UI.</returns>
 	public bool IsOverUI(int fingerId)
 	{
 		if(EventSystem.current == null)
 			return false;
 		
-		if(EventSystem.current.currentInputModule is TouchInputModule) 
+		if(Input.touchCount > 0) 
 		{
-			if(EventSystem.current.IsPointerOverGameObject(fingerId)) 
+			if(touchOverUIHistory[fingerId]) 
 			{
 				return true;
 			}
