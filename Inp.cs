@@ -8,6 +8,15 @@ using UnityEngine.EventSystems;
 
 public class Inp : MonoBehaviour 
 {
+	
+	//some settings you may want to change:
+	private const float timeToRegisterAsQuickTap = 0.4f;
+	private const float distanceToRegisterAsQuickTap = 20f;
+	private const int mouseHistorySize = 30; //in frames, so divide by fps for # of seconds
+	private const int touchHistorySize = 30; //in frames, so divide by fps for # of seconds
+
+
+
 	private static Inp instance;
 	
 	///Inp.ut   - get it? hrhr.
@@ -28,14 +37,28 @@ public class Inp : MonoBehaviour
 	
 	private Vector2[] mouseHistory; 
 	private int mouseHistoryIndex = 0;
-	private const int mouseHistorySize = 30; //in frames, so divide by fps for # of seconds
 	
 	private Dictionary<int, Vector2[]> touchHistory;
 	private Dictionary<int, int> touchHistoryIndex;
 	private Dictionary<int, int> touchHistoryCount;
 	private Dictionary<int, bool> touchOverUIHistory;
-	private const int touchHistorySize = 30; //in frames, so divide by fps for # of seconds
-	
+
+	//used for inputStart:
+	struct PositionAtTime
+	{
+		public Vector2 position;
+		public float time;
+
+		public PositionAtTime(Vector2 position, float time)
+		{
+			this.position = position;
+			this.time = time;
+		}
+	}
+
+	private Dictionary<int, PositionAtTime> inputStart;
+
+
 	void Awake()
 	{
 		mouseHistory = new Vector2[mouseHistorySize];
@@ -43,6 +66,7 @@ public class Inp : MonoBehaviour
 		touchHistoryIndex = new Dictionary<int, int>();
 		touchHistoryCount = new Dictionary<int, int>();
 		touchOverUIHistory = new Dictionary<int, bool>();
+		inputStart = new Dictionary<int, PositionAtTime>();
 	}
 	
 	public void Start()
@@ -60,13 +84,24 @@ public class Inp : MonoBehaviour
 	
 	void LateUpdate()
 	{
-		if(Application.isMobilePlatform)
-			RemoveEndedTouches();
+		if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
+			RemoveEndedMouse();
+		else if(Application.isMobilePlatform)
+			RemoveEndedTouch();
+		
 	}
 	
 	/// <summary> Updates mouse history based on Unity's Input class. </summary>
 	void UpdateMouse()
 	{
+		if(Input.GetMouseButtonDown(0))
+		{
+			if(!inputStart.ContainsKey(0))
+			{
+				inputStart.Add(0, new PositionAtTime(Input.mousePosition, Time.time));
+			}
+		}
+
 		mouseHistoryIndex = (mouseHistoryIndex + 1) % mouseHistorySize;
 		mouseHistory[mouseHistoryIndex] = Input.mousePosition;
 	}
@@ -93,8 +128,18 @@ public class Inp : MonoBehaviour
 			}
 		}
 	}
-	
-	void RemoveEndedTouches()
+
+	/// <summary> Removes registered mouse click things! </summary>
+	void RemoveEndedMouse()
+	{
+		if(Input.GetMouseButtonUp(0))
+		{
+			inputStart.Remove(0);
+		}
+	}
+
+	/// <summary> Removes the registered touches! </summary>
+	void RemoveEndedTouch()
 	{
 		foreach(Touch touch in Input.touches)
 		{
@@ -104,6 +149,7 @@ public class Inp : MonoBehaviour
 				touchHistory.Remove(touch.fingerId);
 				touchHistoryCount.Remove(touch.fingerId);
 				touchOverUIHistory.Remove(touch.fingerId);
+				inputStart.Remove(touch.fingerId);
 			}
 		}
 	}
@@ -164,6 +210,7 @@ public class Inp : MonoBehaviour
 			touchHistory.Add(touch.fingerId, new Vector2[touchHistorySize]);
 			touchHistoryCount.Add(touch.fingerId, 0);
 			touchOverUIHistory.Add(touch.fingerId, false);
+			inputStart.Add(touch.fingerId, new PositionAtTime());
 		}
 		
 		touchHistoryIndex[touch.fingerId] = 0;
@@ -174,6 +221,8 @@ public class Inp : MonoBehaviour
 			touchOverUIHistory[touch.fingerId] = true;
 		else
 			touchOverUIHistory[touch.fingerId] = false;
+
+		inputStart[touch.fingerId] = new PositionAtTime(touch.position, Time.time);
 	}
 	
 	///<returns>Returns the current position of a touch using Unity's unique fingerId.</returns>
@@ -250,9 +299,9 @@ public class Inp : MonoBehaviour
 		return TouchPosition(fingerId) - TouchPreviousPosition(fingerId);
 	}
 	
-	///<returns>Returns the average delta position over X samples of a touch, using Unity's unique fingerId. </returns>
+	///<returns>Returns the average delta position over X samples of a touch, using Unity's unique fingerId. NOTE: CURRENTLY FRAME RATE DEPENDENT!!!!</returns>
 	/// 
-	/// NOTE: CURRENTLY FRAME RATE DEPENDENT!!!!!!
+	/// NOTE: CURRENTLY FRAME RATE DEPENDENT!!!!!! 
 	/// 
 	public Vector2 TouchDeltaPositionSample(int fingerId, int sampleLength)
 	{
@@ -355,7 +404,7 @@ public class Inp : MonoBehaviour
 		}
 	}
 	
-	///<returns>Returns true if the click or (first) touch is new this frame.</returns>
+	///<returns>Returns true if the release of a click or (first) touch is new this frame.</returns>
 	public bool firstInputUp
 	{
 		get 
@@ -381,6 +430,50 @@ public class Inp : MonoBehaviour
 				{
 					return false;
 				}
+			}
+			else
+			{
+				Debug.LogError("Inp.ut doesn't support this platform!");
+				return false;
+			}
+		}
+	}
+
+	///<returns>Returns true if the release of a click or (first) touch is was quick enough or within a distance of the start time and position of the input.</returns>
+	public bool firstInputQuickTap
+	{
+		get 
+		{
+			if(!firstInputUp)
+				return false;
+			
+			if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
+			{
+				if(Time.time - inputStart[0].time < timeToRegisterAsQuickTap && 
+					Vector2.Distance(inputStart[0].position, Inp.ut.firstInputPosition) < distanceToRegisterAsQuickTap)
+				{
+					return true;
+				}
+
+				return false;
+			}
+			else if(Application.isMobilePlatform)
+			{
+				if(Input.touchCount > 0)
+				{
+					Touch touch = Input.GetTouch(0);
+
+					if(touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+					{
+						if(Time.time - inputStart[touch.fingerId].time < timeToRegisterAsQuickTap && 
+							Vector2.Distance(inputStart[touch.fingerId].position, Inp.ut.firstInputPosition) < distanceToRegisterAsQuickTap)
+						{
+							return true;
+						}
+					}
+				}
+
+				return false;
 			}
 			else
 			{
