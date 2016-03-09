@@ -15,10 +15,6 @@ public class Inp : MonoBehaviour
 	private const int mouseHistorySize = 30; //in frames, so divide by fps for # of seconds
 	private const int touchHistorySize = 30; //in frames, so divide by fps for # of seconds
 
-
-
-	private static Inp instance;
-	
 	///Inp.ut   - get it? hrhr.
 	public static Inp ut
 	{
@@ -34,6 +30,7 @@ public class Inp : MonoBehaviour
 			return instance;
 		}
 	}
+	private static Inp instance;
 	
 	private Vector2[] mouseHistory; 
 	private int mouseHistoryIndex = 0;
@@ -43,7 +40,7 @@ public class Inp : MonoBehaviour
 	private Dictionary<int, int> touchHistoryCount;
 	private Dictionary<int, bool> touchOverUIHistory;
 
-	//used for inputStart:
+	private Dictionary<int, PositionAtTime> inputStart;
 	struct PositionAtTime
 	{
 		public Vector2 position;
@@ -56,9 +53,6 @@ public class Inp : MonoBehaviour
 		}
 	}
 
-	private Dictionary<int, PositionAtTime> inputStart;
-
-
 	void Awake()
 	{
 		mouseHistory = new Vector2[mouseHistorySize];
@@ -68,12 +62,7 @@ public class Inp : MonoBehaviour
 		touchOverUIHistory = new Dictionary<int, bool>();
 		inputStart = new Dictionary<int, PositionAtTime>();
 	}
-	
-	public void Start()
-	{
-		
-	}
-	
+
 	void Update()
 	{
 		if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
@@ -88,7 +77,6 @@ public class Inp : MonoBehaviour
 			RemoveEndedMouse();
 		else if(Application.isMobilePlatform)
 			RemoveEndedTouch();
-		
 	}
 	
 	/// <summary> Updates mouse history based on Unity's Input class. </summary>
@@ -282,8 +270,8 @@ public class Inp : MonoBehaviour
 		
 		if(howManyBack > touchHistoryCount[fingerId] - 1)
 		{
-			//			Debug.LogWarning("Requested previous touch position doesn't exist yet, " +
-			//				"so the earliest touch available was returned.");
+//			Debug.LogWarning("Requested previous touch position doesn't exist yet, " +
+//				"so the earliest touch available was returned.");
 			howManyBack = touchHistoryCount[fingerId] - 1;
 		}
 		
