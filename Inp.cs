@@ -227,6 +227,7 @@ public class Inp : MonoBehaviour
 					   touch.phase == TouchPhase.Stationary)
 					{
 						AddTouch(touch);
+						break;
 					}
 					else
 					{
@@ -253,6 +254,7 @@ public class Inp : MonoBehaviour
 					   touch.phase == TouchPhase.Stationary)
 					{
 						AddTouch(touch);
+						break;
 					}
 					else
 					{
@@ -300,7 +302,9 @@ public class Inp : MonoBehaviour
 			{
 				if(touch.fingerId == fingerId)
 				{
-					if(touch.phase == TouchPhase.Began || touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary)
+					if( touch.phase == TouchPhase.Began || 
+						touch.phase == TouchPhase.Moved || 
+						touch.phase == TouchPhase.Stationary)
 					{
 						AddTouch(touch);
 					}
@@ -337,7 +341,7 @@ public class Inp : MonoBehaviour
 		
 		return avgDeltaPos;
 	}
-	
+
 	///<returns>Returns screenPosition translated to worldspace.</returns>
 	public Vector3 To2DWorld(Vector2 screenPosition, float z = 0f)
 	{
@@ -379,10 +383,8 @@ public class Inp : MonoBehaviour
 						return false;
 					}
 				}
-				else
-				{
-					return false;
-				}
+
+				return false;
 			}
 			else
 			{
@@ -414,10 +416,8 @@ public class Inp : MonoBehaviour
 						return false;
 					}
 				}
-				else
-				{
-					return false;
-				}
+
+				return false;
 			}
 			else
 			{
@@ -458,6 +458,44 @@ public class Inp : MonoBehaviour
 						{
 							return true;
 						}
+					}
+				}
+
+				return false;
+			}
+			else
+			{
+				Debug.LogError("Inp.ut doesn't support this platform!");
+				return false;
+			}
+		}
+	}
+
+	///<returns>Returns true if the release of a click or (first) touch can no longer be quick enough or within a distance of the start time and position of the input.</returns>
+	public bool firstInputPastQuickTap
+	{
+		get 
+		{
+			if(Application.isEditor || (!Application.isMobilePlatform && !Application.isConsolePlatform))
+			{
+				if(Time.time - inputStart[0].time > timeToRegisterAsQuickTap || 
+					Vector2.Distance(inputStart[0].position, Inp.ut.firstInputPosition) > distanceToRegisterAsQuickTap)
+				{
+					return true;
+				}
+
+				return false;
+			}
+			else if(Application.isMobilePlatform)
+			{
+				if(Input.touchCount > 0)
+				{
+					Touch touch = Input.GetTouch(0);
+
+					if(Time.time - inputStart[touch.fingerId].time > timeToRegisterAsQuickTap || 
+						Vector2.Distance(inputStart[touch.fingerId].position, Inp.ut.firstInputPosition) > distanceToRegisterAsQuickTap)
+					{
+						return true;
 					}
 				}
 
