@@ -63,6 +63,8 @@ public class Inp : MonoBehaviour
 		get { return Input.mousePresent && _mouseEnabled; }
 		set { _mouseEnabled = value; }
 	}
+	
+	public const int mouseId = -1;
 
 	void Awake()
 	{
@@ -110,22 +112,33 @@ public class Inp : MonoBehaviour
 	/// <summary> Updates mouse history based on Unity's Input class. </summary>
 	void UpdateMouse()
 	{
-		if(!inputHistory.ContainsKey(0))
-			AddInput(0, Input.mousePosition);
+		if(!inputHistory.ContainsKey(mouseId))
+			AddInput(mouseId, Input.mousePosition);
 		
 		if(Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
-			inputStart.Add(0, new PositionAtTime(Input.mousePosition, Time.time));
+		{
+			inputHistoryCount[mouseId] = 0; //so that when we do any sampling, 
+			// it doesn't try to go beyond where the touch started. 
+			// this is especially important for touchscreens that set the mouse position, 
+			// as the mouse is set to a position instantly...
+			// also: it's set to 0 because it's +1'ed below
+			
+			if(!inputStart.ContainsKey(mouseId))
+				inputStart.Add(mouseId, new PositionAtTime(Input.mousePosition, Time.time));
+			else //this may be the case when we're on a touch screen on a computer...
+				inputStart[mouseId] = new PositionAtTime(Input.mousePosition, Time.time);
+		}
 
-		inputHistoryIndex[0] = (inputHistoryIndex[0] + 1) % historySize;
-		inputHistory[0][inputHistoryIndex[0]] = Input.mousePosition;
-		inputHistoryCount[0] = Mathf.Clamp(inputHistoryCount[0] + 1, 0, historySize);
+		inputHistoryIndex[mouseId] = (inputHistoryIndex[mouseId] + 1) % historySize;
+		inputHistory[mouseId][inputHistoryIndex[mouseId]] = Input.mousePosition;
+		inputHistoryCount[mouseId] = Mathf.Clamp(inputHistoryCount[mouseId] + 1, 0, historySize);
 		
 		//we don't have to set the below because it works as expected with a mouse
 		
 		//if(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(0))
-		//	inputOverUIHistory[0] = true;
+		//	inputOverUIHistory[mouseId] = true;
 		//else
-		//	inputOverUIHistory[0] = false;
+		//	inputOverUIHistory[mouseId] = false;
 	}
 	
 	/// <summary> Updates touches history based on Unity's Input class. </summary>
@@ -155,8 +168,8 @@ public class Inp : MonoBehaviour
 	/// <summary> Removes registered mouse click things! </summary>
 	void RemoveEndedMouse()
 	{
-		if(Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1))
-			inputStart.Remove(0);
+		if((Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1)) && inputStart.ContainsKey(mouseId)) //in case we're on a touchscreen with a mouse
+			inputStart.Remove(mouseId);
 	}
 
 	/// <summary> Removes the registered touches! </summary>
@@ -192,10 +205,10 @@ public class Inp : MonoBehaviour
 	{
 		if(!inputHistory.ContainsKey(fingerId))
 		{
-			if(mouseEnabled && fingerId < 3)
+			if(mouseEnabled && fingerId == mouseId)
 				return Input.mousePosition;
 			
-			Debug.LogError("An Inp.ut position was checked before Inp.ut's first update." +
+			Debug.LogError("An Inp.ut position was checked before Inp.ut's first update. " +
 				"Don't call for position functions in other script's Start() and Awake() functions " +
 				"as it doesn't make any sense for touches.");
 		}
@@ -208,10 +221,10 @@ public class Inp : MonoBehaviour
 	{
 		if(!inputHistory.ContainsKey(fingerId))
 		{
-			if(mouseEnabled && fingerId < 3)
+			if(mouseEnabled && fingerId == mouseId)
 				return Input.mousePosition;
 			
-			Debug.LogError("An Inp.ut position was checked before Inp.ut's first update." +
+			Debug.LogError("An Inp.ut position was checked before Inp.ut's first update. " +
 				"Don't call for position functions in other script's Start() and Awake() functions " +
 				"as it doesn't make any sense for touches.");
 		}
@@ -249,29 +262,12 @@ public class Inp : MonoBehaviour
 	{
 		
 		if(!inputHistory.ContainsKey(fingerId))
-		{
-			Debug.LogError("This should have never happened and yet it did... Script execution order incorrect?");
-			
-			//foreach(Touch touch in Input.touches)
-			//{
-			//	if(touch.fingerId == fingerId)
-			//	{
-			//		if(touch.phase == TouchPhase.Began || touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary)
-			//		{
-			//			AddTouch(touch);
-			//		}
-					
-			//		return Vector2.zero;
-			//	}
-			//}
-		}
+			return Vector2.zero;
 		
 		int samples = Mathf.Min(sampleLength, inputHistoryCount[fingerId] - 1); //history-1 because we'll need to go back in time at least 1 frame
 		
 		if(samples <= 1)
-		{
 			return Vector2.zero;
-		}
 		
 		Vector2 avgDeltaPos = Vector2.zero;
 		int thisIndex = inputHistoryIndex[fingerId];
@@ -387,8 +383,11 @@ public class Inp : MonoBehaviour
 			
 			if(mouseEnabled)
 			{
-				if(Time.time - inputStart[0].time < timeToRegisterAsQuickTap && 
-					Vector2.Distance(inputStart[0].position, Inp.ut.firstPosition) < distanceToRegisterAsQuickTap)
+				if(inputStart.Count < 1) //in case a second touch on a touchscreen with mouse has let go
+					return false;
+				
+				if(Time.time - inputStart[mouseId].time < timeToRegisterAsQuickTap && 
+					Vector2.Distance(inputStart[mouseId].position, Inp.ut.firstPosition) < distanceToRegisterAsQuickTap)
 				{
 					return true;
 				}
@@ -417,8 +416,8 @@ public class Inp : MonoBehaviour
 			
 			if(mouseEnabled)
 			{
-				if(Time.time - inputStart[0].time > timeToRegisterAsQuickTap || 
-					Vector2.Distance(inputStart[0].position, Inp.ut.firstPosition) > distanceToRegisterAsQuickTap)
+				if(Time.time - inputStart[mouseId].time > timeToRegisterAsQuickTap || 
+					Vector2.Distance(inputStart[mouseId].position, Inp.ut.firstPosition) > distanceToRegisterAsQuickTap)
 				{
 					return true;
 				}
@@ -446,7 +445,7 @@ public class Inp : MonoBehaviour
 			
 			if(mouseEnabled)
 			{
-				return Position(0);
+				return Position(mouseId);
 			}
 
 			return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
@@ -465,7 +464,7 @@ public class Inp : MonoBehaviour
 			
 			if(mouseEnabled)
 			{
-				return PreviousPosition(0);
+				return PreviousPosition(mouseId);
 			}
 			
 			return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
@@ -484,7 +483,7 @@ public class Inp : MonoBehaviour
 			
 			if(mouseEnabled)
 			{
-				return DeltaPosition(0);
+				return DeltaPosition(mouseId);
 			}
 
 			return Vector2.zero;
