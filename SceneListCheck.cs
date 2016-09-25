@@ -3,7 +3,9 @@
 using System;
 using System.IO;
 using System.Linq;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using UnityEngine;
 
 public static class SceneListCheck
@@ -42,7 +44,8 @@ public static class SceneListCheck
 	{
 		return line + Environment.NewLine;
 	}
-
+	
+	#if UNITY_EDITOR
 	public static void Generate()
     {
 		//get the path of the generator
@@ -88,7 +91,8 @@ public static class SceneListCheck
 
 		Debug.Log("Generated new SceneList.cs!");
     }
-
+	#endif
+	
 	public static bool Has(string sceneName)
 	{
 		#if UNITY_EDITOR
