@@ -47,7 +47,7 @@ public class CameraControls : MonoBehaviour
 	}
 
 	void Update () 
-	{}
+	{
 		if(Inp.ut.isOverUI)
 			waitForInteraction = true;
 
