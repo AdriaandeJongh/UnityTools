@@ -37,6 +37,7 @@ public class Inp : MonoBehaviour
 	private Dictionary<int, int> inputHistoryCount;
 	private Dictionary<int, bool> inputOverUIHistory;
 	private Dictionary<int, PositionAtTime> inputStart;
+	private List<int> inputToBeRemoved;
 	
 	struct PositionAtTime
 	{
@@ -77,6 +78,7 @@ public class Inp : MonoBehaviour
 		inputHistoryCount = new Dictionary<int, int>();
 		inputOverUIHistory = new Dictionary<int, bool>();
 		inputStart = new Dictionary<int, PositionAtTime>();
+		inputToBeRemoved = new List<int>();
 
 		#if UNITY_TVOS
 		if(Application.platform == RuntimePlatform.tvOS)
@@ -94,19 +96,16 @@ public class Inp : MonoBehaviour
 	void Update()
 	{
 		if(touchEnabled)
-			UpdateTouch();
-		
-		if(mouseEnabled)
-			UpdateMouse();
-	}
-	
-	void LateUpdate()
-	{
-		if(touchEnabled)
+		{
 			RemoveEndedTouch();
+			UpdateTouch();
+		}
 		
 		if(mouseEnabled)
+		{
 			RemoveEndedMouse();
+			UpdateMouse();
+		}
 	}
 	
 	/// <summary> Updates mouse history based on Unity's Input class. </summary>
@@ -117,7 +116,7 @@ public class Inp : MonoBehaviour
 		
 		if(Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
 		{
-			inputHistoryCount[mouseId] = 0; //so that when we do any sampling, 
+			inputHistoryCount[mouseId] = 1; //so that when we do any sampling, 
 			// it doesn't try to go beyond where the touch started. 
 			// this is especially important for touchscreens that set the mouse position, 
 			// as the mouse is set to a position instantly...
@@ -128,17 +127,12 @@ public class Inp : MonoBehaviour
 			else //this may be the case when we're on a touch screen on a computer...
 				inputStart[mouseId] = new PositionAtTime(Input.mousePosition, Time.time);
 		}
+		else if((Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1)) && inputStart.ContainsKey(mouseId)) //in case we're on a touchscreen with a mouse
+			inputToBeRemoved.Add(mouseId);
 
 		inputHistoryIndex[mouseId] = (inputHistoryIndex[mouseId] + 1) % historySize;
 		inputHistory[mouseId][inputHistoryIndex[mouseId]] = Input.mousePosition;
 		inputHistoryCount[mouseId] = Mathf.Clamp(inputHistoryCount[mouseId] + 1, 0, historySize);
-		
-		//we don't have to set the below because it works as expected with a mouse
-		
-		//if(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(0))
-		//	inputOverUIHistory[mouseId] = true;
-		//else
-		//	inputOverUIHistory[mouseId] = false;
 	}
 	
 	/// <summary> Updates touches history based on Unity's Input class. </summary>
@@ -156,11 +150,16 @@ public class Inp : MonoBehaviour
 				inputHistoryIndex[touch.fingerId] = (inputHistoryIndex[touch.fingerId] + 1) % historySize;
 				inputHistory[touch.fingerId][inputHistoryIndex[touch.fingerId]] = touch.position;
 				inputHistoryCount[touch.fingerId] = Mathf.Clamp(inputHistoryCount[touch.fingerId] + 1, 0, historySize);
-
+				
+				//this is a fix to unity's system
 				if(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId))
 					inputOverUIHistory[touch.fingerId] = true;
 				else
 					inputOverUIHistory[touch.fingerId] = false;
+			}
+			else
+			{
+				inputToBeRemoved.Add(touch.fingerId);
 			}
 		}
 	}
@@ -168,24 +167,35 @@ public class Inp : MonoBehaviour
 	/// <summary> Removes registered mouse click things! </summary>
 	void RemoveEndedMouse()
 	{
-		if((Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1)) && inputStart.ContainsKey(mouseId)) //in case we're on a touchscreen with a mouse
-			inputStart.Remove(mouseId);
+		if(inputToBeRemoved.Count == 0)
+			return;
+		
+		foreach (var index in inputToBeRemoved)
+		{
+			inputStart.Remove(index);
+			
+		}
+		
+		inputToBeRemoved.Clear();
+		
 	}
 
 	/// <summary> Removes the registered touches! </summary>
 	void RemoveEndedTouch()
 	{
-		foreach(Touch touch in Input.touches)
+		if(inputToBeRemoved.Count == 0)
+			return;
+		
+		foreach(var index in inputToBeRemoved)
 		{
-			if(touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
-			{
-				inputHistoryIndex.Remove(touch.fingerId);
-				inputHistory.Remove(touch.fingerId);
-				inputHistoryCount.Remove(touch.fingerId);
-				inputOverUIHistory.Remove(touch.fingerId);
-				inputStart.Remove(touch.fingerId);
-			}
+			inputHistoryIndex.Remove(index);
+			inputHistory.Remove(index);
+			inputHistoryCount.Remove(index);
+			inputOverUIHistory.Remove(index);
+			inputStart.Remove(index);
 		}
+		
+		inputToBeRemoved.Clear();
 	}
 	
 	void AddInput(int fingerId, Vector2 position)
@@ -402,6 +412,20 @@ public class Inp : MonoBehaviour
 	{
 		get 
 		{
+			if(inputStart.Count == 0)
+			{
+					//Debug.Log("Can't figure out this bug; inputStart is empty for some reason. Debugging:" +
+					//	" any:" + any.ToString() + 
+					//	", firstDown:" + firstDown.ToString() + 
+					//	", firstUp:" + firstUp.ToString() + 
+					//	", firstQuickTap:" + firstQuickTap.ToString() + 
+					//	", firstPosition:" + firstPosition.ToString() + 
+					//	", Time.time:" + Time.time.ToString() + 
+					//	", inputHistoryCount[mouseId]:" + inputHistoryCount[mouseId].ToString());
+				
+				return true;
+			}
+			
 			
 			if(touchEnabled && Input.touchCount > 0)
 			{
