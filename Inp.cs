@@ -5,15 +5,22 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.EventSystems;
+using System.Linq;
 
 public class Inp : MonoBehaviour 
 {
 	
 	//some settings you may want to change:
-	private const float timeToRegisterAsQuickTap = 0.4f;
-	private const float distanceToRegisterAsQuickTap = 20f;
+	public const float timeToRegisterAsQuickTap = 0.4f; //in seconds
+	
+	#if UNITY_TVOS
+	public const float distanceToRegisterAsQuickTap = 70f; //in screenspace
+	#else
+	public const float distanceToRegisterAsQuickTap = 20f; //in screenspace
+	#endif
+	
 	private const int historySize = 30; //in frames, so divide by fps for # of seconds
-
+	
 	///Inp.ut   - get it? hrhr.
 	public static Inp ut
 	{
@@ -43,7 +50,7 @@ public class Inp : MonoBehaviour
 	{
 		public Vector2 position;
 		public float time;
-
+		
 		public PositionAtTime(Vector2 position, float time)
 		{
 			this.position = position;
@@ -65,8 +72,8 @@ public class Inp : MonoBehaviour
 		set { _mouseEnabled = value; }
 	}
 	
-	public const int mouseId = -1;
-
+	public const int mouseId = -10;
+	
 	void Awake()
 	{
 		//make this singleton persistent & don't allow any other gameobject to have this component
@@ -79,7 +86,7 @@ public class Inp : MonoBehaviour
 		inputOverUIHistory = new Dictionary<int, bool>();
 		inputStart = new Dictionary<int, PositionAtTime>();
 		inputToBeRemoved = new List<int>();
-
+		
 		#if UNITY_TVOS
 		if(Application.platform == RuntimePlatform.tvOS)
 		{
@@ -92,7 +99,14 @@ public class Inp : MonoBehaviour
 			Debug.LogError("This platform is currently not supported by Inp.ut.");
 		}
 	}
-
+	
+	void OnEnable()
+	{
+		//This should only ever get called on first load and after an Assembly reload in Unity.
+		// (because instance should be set on awake)
+		if(instance == null) instance = this;
+	}
+	
 	void Update()
 	{
 		if(touchEnabled)
@@ -101,7 +115,7 @@ public class Inp : MonoBehaviour
 			UpdateTouch();
 		}
 		
-		if(mouseEnabled)
+		if(mouseEnabled && Input.touchCount == 0)
 		{
 			RemoveEndedMouse();
 			UpdateMouse();
@@ -112,24 +126,37 @@ public class Inp : MonoBehaviour
 	void UpdateMouse()
 	{
 		if(!inputHistory.ContainsKey(mouseId))
+		{
 			AddInput(mouseId, Input.mousePosition);
+		}
 		
-		if(Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1))
+		if (Input.GetMouseButtonDown(0))
 		{
 			inputHistoryCount[mouseId] = 1; //so that when we do any sampling, 
-			// it doesn't try to go beyond where the touch started. 
-			// this is especially important for touchscreens that set the mouse position, 
-			// as the mouse is set to a position instantly...
-			// also: it's set to 0 because it's +1'ed below
+											// it doesn't try to go beyond where the touch started. 
+											// this is especially important for touchscreens that set the mouse position, 
+											// as the mouse is set to a position instantly...
 			
-			if(!inputStart.ContainsKey(mouseId))
+			if (!inputStart.ContainsKey(mouseId))
 				inputStart.Add(mouseId, new PositionAtTime(Input.mousePosition, Time.time));
 			else //this may be the case when we're on a touch screen on a computer...
 				inputStart[mouseId] = new PositionAtTime(Input.mousePosition, Time.time);
+			
+			//using our custom method here because of computers with touch screen being funky 
+			inputOverUIHistory[mouseId] = PositionIsOverUI(Input.mousePosition);
 		}
-		else if((Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1)) && inputStart.ContainsKey(mouseId)) //in case we're on a touchscreen with a mouse
+		else if (Input.GetMouseButtonUp(0)) //in case we're on a touchscreen with a mouse
+		{
 			inputToBeRemoved.Add(mouseId);
-
+		}
+		else
+		{
+			//no need for our custom (probably more expensive) method here
+			//inputOverUIHistory[mouseId] = PositionIsOverUI(Input.mousePosition);
+			inputOverUIHistory[mouseId] =
+				EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+		}
+		
 		inputHistoryIndex[mouseId] = (inputHistoryIndex[mouseId] + 1) % historySize;
 		inputHistory[mouseId][inputHistoryIndex[mouseId]] = Input.mousePosition;
 		inputHistoryCount[mouseId] = Mathf.Clamp(inputHistoryCount[mouseId] + 1, 0, historySize);
@@ -151,11 +178,10 @@ public class Inp : MonoBehaviour
 				inputHistory[touch.fingerId][inputHistoryIndex[touch.fingerId]] = touch.position;
 				inputHistoryCount[touch.fingerId] = Mathf.Clamp(inputHistoryCount[touch.fingerId] + 1, 0, historySize);
 				
-				//this is a fix to unity's system
-				if(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId))
-					inputOverUIHistory[touch.fingerId] = true;
-				else
-					inputOverUIHistory[touch.fingerId] = false;
+				//no need for the custom (probably more expensive) method here
+				//inputOverUIHistory[touch.fingerId] = PositionIsOverUI(touch.position);
+				inputOverUIHistory[touch.fingerId] =
+					EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId);
 			}
 			else
 			{
@@ -163,7 +189,7 @@ public class Inp : MonoBehaviour
 			}
 		}
 	}
-
+	
 	/// <summary> Removes registered mouse click things! </summary>
 	void RemoveEndedMouse()
 	{
@@ -173,13 +199,11 @@ public class Inp : MonoBehaviour
 		foreach (var index in inputToBeRemoved)
 		{
 			inputStart.Remove(index);
-			
 		}
 		
 		inputToBeRemoved.Clear();
-		
 	}
-
+	
 	/// <summary> Removes the registered touches! </summary>
 	void RemoveEndedTouch()
 	{
@@ -207,7 +231,10 @@ public class Inp : MonoBehaviour
 		inputHistory.Add(fingerId, new Vector2[historySize]);
 		inputHistory[fingerId][inputHistoryIndex[fingerId]] = position;
 		inputHistoryCount.Add(fingerId, 1);
-		inputOverUIHistory.Add(fingerId, EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(fingerId));
+		
+		//using our own custom position over ui function as the real one is iffy on computers with touch screen
+		inputOverUIHistory.Add(fingerId, PositionIsOverUI(position));
+		//inputOverUIHistory.Add(fingerId, EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(fingerId));
 	}
 	
 	///<returns>Returns the current position of a touch using Unity's unique fingerId.</returns>
@@ -327,11 +354,17 @@ public class Inp : MonoBehaviour
 	{
 		get 
 		{
-			if(Application.platform == RuntimePlatform.tvOS && Input.GetButtonDown("tvOS-TouchAreaClick"))
+			if(Application.platform == RuntimePlatform.tvOS)
 			{
-				inputStart[Input.GetTouch(0).fingerId] = new PositionAtTime(Input.GetTouch(0).position, Time.time);
-				
-				return true;
+				if(Input.GetButtonDown("tvOS-TouchAreaClick"))
+				{
+					inputStart[Input.GetTouch(0).fingerId] = new PositionAtTime(Input.GetTouch(0).position, Time.time);
+					return true;
+				}
+				else
+				{
+					return false;
+				}
 			}
 			
 			if(touchEnabled && Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
@@ -339,11 +372,11 @@ public class Inp : MonoBehaviour
 				return true;
 			}
 			
-			if(mouseEnabled && (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)))
+			if(mouseEnabled && Input.touchCount == 0 && Input.GetMouseButtonDown(0))
 			{
 				return true;
 			}
-
+			
 			return false;
 		}
 	}
@@ -353,25 +386,27 @@ public class Inp : MonoBehaviour
 	{
 		get 
 		{
-			if(Application.platform == RuntimePlatform.tvOS && Input.GetButtonUp("tvOS-TouchAreaClick"))
+			if(Application.platform == RuntimePlatform.tvOS)
 			{
-				return true;
+				return Input.GetButtonUp("tvOS-TouchAreaClick");
 			}
 			
 			if(touchEnabled && Input.touchCount > 0 && (Input.GetTouch(0).phase == TouchPhase.Ended || Input.GetTouch(0).phase == TouchPhase.Canceled))
 			{
+				//Debug.Log("First up touch");
 				return true;
 			}
 			
-			if(mouseEnabled && (Input.GetMouseButtonUp(0) || Input.GetMouseButtonUp(1)))
+			if(mouseEnabled && Input.touchCount == 0 && Input.GetMouseButtonUp(0))
 			{
+				//Debug.Log("First up mouse");
 				return true;
 			}
-
+			
 			return false;
 		}
 	}
-
+	
 	///<returns>Returns true if the release of a click or (first) touch is was quick enough or within a distance of the start time and position of the input.</returns>
 	public bool firstQuickTap
 	{
@@ -391,62 +426,53 @@ public class Inp : MonoBehaviour
 				}
 			}
 			
-			if(mouseEnabled)
+			if(mouseEnabled && Input.touchCount == 0)
 			{
 				if(inputStart.Count < 1) //in case a second touch on a touchscreen with mouse has let go
+				{
+					//Debug.Log("touch already removed mouse");
 					return false;
+				}
 				
-				if(Time.time - inputStart[mouseId].time < timeToRegisterAsQuickTap && 
+				if (Time.time - inputStart[mouseId].time < timeToRegisterAsQuickTap && 
 					Vector2.Distance(inputStart[mouseId].position, Inp.ut.firstPosition) < distanceToRegisterAsQuickTap)
 				{
 					return true;
 				}
 			}
-
+			
 			return false;
 		}
 	}
-
+	
 	///<returns>Returns true if the release of a click or (first) touch can no longer be quick enough or within a distance of the start time and position of the input.</returns>
 	public bool firstIsPastQuickTap
 	{
 		get 
 		{
 			if(inputStart.Count == 0)
-			{
-					//Debug.Log("Can't figure out this bug; inputStart is empty for some reason. Debugging:" +
-					//	" any:" + any.ToString() + 
-					//	", firstDown:" + firstDown.ToString() + 
-					//	", firstUp:" + firstUp.ToString() + 
-					//	", firstQuickTap:" + firstQuickTap.ToString() + 
-					//	", firstPosition:" + firstPosition.ToString() + 
-					//	", Time.time:" + Time.time.ToString() + 
-					//	", inputHistoryCount[mouseId]:" + inputHistoryCount[mouseId].ToString());
-				
 				return true;
-			}
-			
 			
 			if(touchEnabled && Input.touchCount > 0)
 			{
 				Touch touch = Input.GetTouch(0);
 				
-				if(Time.time - inputStart[touch.fingerId].time > timeToRegisterAsQuickTap || 
+				if (Time.time - inputStart[touch.fingerId].time > timeToRegisterAsQuickTap || 
 					Vector2.Distance(inputStart[touch.fingerId].position, touch.position) > distanceToRegisterAsQuickTap)
 				{
 					return true;
 				}
 			}
 			
-			if(mouseEnabled)
+			if(mouseEnabled && Input.touchCount == 0)
 			{
-				if(Time.time - inputStart[mouseId].time > timeToRegisterAsQuickTap || 
+				if (Time.time - inputStart[mouseId].time > timeToRegisterAsQuickTap || 
 					Vector2.Distance(inputStart[mouseId].position, Inp.ut.firstPosition) > distanceToRegisterAsQuickTap)
 				{
 					return true;
 				}
 			}
-
+			
 			return false;
 		}
 	}
@@ -458,7 +484,8 @@ public class Inp : MonoBehaviour
 		{
 			if(Application.platform == RuntimePlatform.tvOS)
 			{
-				//this is a design choice. yeah....
+				//this is a design choice related to the way the tvOS controller handles touch.
+				// use delta position to get any valuable data!
 				return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
 			}
 			
@@ -467,11 +494,11 @@ public class Inp : MonoBehaviour
 				return Position(Input.GetTouch(0).fingerId);
 			}
 			
-			if(mouseEnabled)
+			if(mouseEnabled && Input.touchCount == 0)
 			{
 				return Position(mouseId);
 			}
-
+			
 			return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
 		}
 	}
@@ -486,7 +513,7 @@ public class Inp : MonoBehaviour
 				return PreviousPosition(Input.GetTouch(0).fingerId);
 			}
 			
-			if(mouseEnabled)
+			if(mouseEnabled && Input.touchCount == 0)
 			{
 				return PreviousPosition(mouseId);
 			}
@@ -505,15 +532,37 @@ public class Inp : MonoBehaviour
 				return DeltaPosition(Input.GetTouch(0).fingerId);
 			}
 			
-			if(mouseEnabled)
+			if(mouseEnabled && Input.touchCount == 0)
 			{
 				return DeltaPosition(mouseId);
 			}
-
+			
 			return Vector2.zero;
 		}
 	}
 	
+	
+	///<returns>Returns how long the first input has been down.</returns>
+	public float firstDownDuration
+	{
+		get 
+		{
+			if(!any)
+				return 0f;
+			
+			if(touchEnabled && Input.touchCount > 0)
+			{
+				return Time.time - inputStart[Input.GetTouch(0).fingerId].time;
+			}
+			
+			if(mouseEnabled && Input.touchCount == 0)
+			{
+				return Time.time - inputStart[mouseId].time;
+			}
+			
+			return 0f;
+		}
+	}
 	
 	
 	///<returns>Returns whether any input is hovering over Unity 5's UI.</returns>
@@ -528,16 +577,18 @@ public class Inp : MonoBehaviour
 			{
 				foreach(Touch touch in Input.touches) 
 				{
-					if(inputOverUIHistory[touch.fingerId]) 
+					if (inputOverUIHistory[touch.fingerId]) 
 					{
 						return true;
 					}
 				}
 			}
 			
-			if(mouseEnabled)
+			if(mouseEnabled && Input.touchCount == 0 && inputOverUIHistory[mouseId])
 			{
-				return EventSystem.current.IsPointerOverGameObject();
+				return true;
+				//return EventSystem.current.IsPointerOverGameObject();
+				//return PositionIsOverUI(firstPosition);
 			}
 			
 			return false;
@@ -555,11 +606,34 @@ public class Inp : MonoBehaviour
 			return true;
 		}
 		
-		if(mouseEnabled)
+		if(mouseEnabled && Input.touchCount == 0 && inputOverUIHistory[mouseId])
 		{
-			return EventSystem.current.IsPointerOverGameObject();
+			return true;
+			//return EventSystem.current.IsPointerOverGameObject();
+			//return PositionIsOverUI(firstPosition);
 		}
 		
 		return false;
 	}
+	
+	private List<RaycastResult> positionIsOverUIRaycastResults = new List<RaycastResult>();
+	private bool PositionIsOverUI(Vector2 position)
+	{
+		if (EventSystem.current == null)
+			return false;
+		
+		PointerEventData eventDataCurrentPosition = new PointerEventData(EventSystem.current);
+		eventDataCurrentPosition.position = position;
+		
+		positionIsOverUIRaycastResults.Clear();
+		EventSystem.current.RaycastAll(eventDataCurrentPosition, positionIsOverUIRaycastResults);
+		
+		return positionIsOverUIRaycastResults.Count > 0;
+	}
 }
+
+
+
+
+
+
