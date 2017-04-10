@@ -130,7 +130,7 @@ public class Inp : MonoBehaviour
 			AddInput(mouseId, Input.mousePosition);
 		}
 		
-		if (Input.GetMouseButtonDown(0))
+		if(Input.GetMouseButtonDown(0))
 		{
 			inputHistoryCount[mouseId] = 1; //so that when we do any sampling, 
 											// it doesn't try to go beyond where the touch started. 
@@ -145,17 +145,20 @@ public class Inp : MonoBehaviour
 			//using our custom method here because of computers with touch screen being funky 
 			inputOverUIHistory[mouseId] = PositionIsOverUI(Input.mousePosition);
 		}
-		else if (Input.GetMouseButtonUp(0)) //in case we're on a touchscreen with a mouse
+		if(Input.GetMouseButtonUp(0)) //in case we're on a touchscreen with a mouse
 		{
 			inputToBeRemoved.Add(mouseId);
 		}
-		else
+		if(!Input.GetMouseButtonDown(0) && !Input.GetMouseButtonUp(0))
 		{
 			//no need for our custom (probably more expensive) method here
 			//inputOverUIHistory[mouseId] = PositionIsOverUI(Input.mousePosition);
 			inputOverUIHistory[mouseId] =
 				EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 		}
+		
+		//the structure above used to be if(down) else if (up) else, but...
+		//...on touchpads, down & up can happen during the same frame!
 		
 		inputHistoryIndex[mouseId] = (inputHistoryIndex[mouseId] + 1) % historySize;
 		inputHistory[mouseId][inputHistoryIndex[mouseId]] = Input.mousePosition;
@@ -393,13 +396,11 @@ public class Inp : MonoBehaviour
 			
 			if(touchEnabled && Input.touchCount > 0 && (Input.GetTouch(0).phase == TouchPhase.Ended || Input.GetTouch(0).phase == TouchPhase.Canceled))
 			{
-				//Debug.Log("First up touch");
 				return true;
 			}
 			
 			if(mouseEnabled && Input.touchCount == 0 && Input.GetMouseButtonUp(0))
 			{
-				//Debug.Log("First up mouse");
 				return true;
 			}
 			
@@ -430,7 +431,6 @@ public class Inp : MonoBehaviour
 			{
 				if(inputStart.Count < 1) //in case a second touch on a touchscreen with mouse has let go
 				{
-					//Debug.Log("touch already removed mouse");
 					return false;
 				}
 				
