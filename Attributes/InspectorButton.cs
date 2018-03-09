@@ -20,8 +20,13 @@ public class InspectorButtonDrawer : Editor
 	public override void OnInspectorGUI()
 	{
 		base.OnInspectorGUI();
-		
+		CreateButtons(target, targets);
+	}
+	
+	public static void CreateButtons(object target, object[] targets)
+	{
 		var mono = target as MonoBehaviour;
+		
 		
 		var methods = mono.GetType()
 			.GetMembers(BindingFlags.Instance | 

@@ -58,6 +58,8 @@ public class Inp : MonoBehaviour
 		}
 	}
 	
+	private Camera currentCamera;
+	
 	private bool _touchEnabled = true;
 	public bool touchEnabled
 	{
@@ -333,12 +335,15 @@ public class Inp : MonoBehaviour
 	///<returns>Returns screenPosition translated to worldspace.</returns>
 	public Vector3 To2DWorld(Vector2 screenPosition, float z = 0f)
 	{
-		if(!Camera.main.orthographic || Camera.main.transform.eulerAngles.x != 0 || Camera.main.transform.eulerAngles.y != 0)
+		if(currentCamera == null)
+			currentCamera = Camera.main;
+		
+		if(!currentCamera.orthographic || currentCamera.transform.eulerAngles.x != 0 || currentCamera.transform.eulerAngles.y != 0)
 		{
 			Debug.LogError("To use To2DWorld(), the camera needs to be orthographic & non-rotated on x- and y-axis!");
 		}
 		
-		Vector3 worldPosition = Camera.main.ScreenToWorldPoint(screenPosition);
+		Vector3 worldPosition = currentCamera.ScreenToWorldPoint(screenPosition);
 		worldPosition.z = z;
 		return worldPosition;
 	}

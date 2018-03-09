@@ -34,7 +34,7 @@ public class HideWhenTrueDrawer : PropertyDrawer
 		SerializedProperty boolProperty = property.serializedObject.FindProperty(hiddenAttribute.hideBoolean);
 
 		if(boolProperty.boolValue)
-			return 0f;
+			return -2f;
 
 		return EditorGUI.GetPropertyHeight(property);
 	}
