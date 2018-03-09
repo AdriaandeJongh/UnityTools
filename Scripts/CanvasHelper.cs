@@ -7,8 +7,6 @@ using UnityEngine.Events;
 [RequireComponent(typeof(Canvas))]
 public class CanvasHelper : MonoBehaviour
 {
-	private static List<CanvasHelper> helpers = new List<CanvasHelper>();
-	
 	private static bool screenChangeVarsInitialized = false;
 	private static ScreenOrientation lastOrientation = ScreenOrientation.Unknown;
 	private static Vector2 lastResolution = Vector2.zero;
@@ -20,9 +18,6 @@ public class CanvasHelper : MonoBehaviour
 	
 	void Awake()
 	{
-		if(!helpers.Contains(this))
-			helpers.Add(this);
-		
 		safeAreaTransform = transform.Find("SafeArea") as RectTransform;
 		ApplySafeArea();
 	}
@@ -75,11 +70,5 @@ public class CanvasHelper : MonoBehaviour
 		
 		safeAreaTransform.anchorMin = anchorMin;
 		safeAreaTransform.anchorMax = anchorMax;
-	}
-	
-	void OnDestroy()
-	{
-		if(helpers != null && helpers.Contains(this))
-			helpers.Remove(this);
 	}
 }
