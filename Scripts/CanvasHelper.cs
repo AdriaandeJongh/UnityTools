@@ -11,8 +11,8 @@ public class CanvasHelper : MonoBehaviour
 	private static ScreenOrientation lastOrientation = ScreenOrientation.Unknown;
 	private static Vector2 lastResolution = Vector2.zero;
 	
-	private static UnityEvent onOrientationChange = new UnityEvent();
-	private static UnityEvent onResolutionChange = new UnityEvent();
+	public static UnityEvent onOrientationChange = new UnityEvent();
+	public static UnityEvent onResolutionChange = new UnityEvent();
 	
 	private RectTransform safeAreaTransform;
 	
